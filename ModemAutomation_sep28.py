@@ -8,6 +8,7 @@ import socket
 import jsonHelper
 from texttable import Texttable
 import multiprocessing
+import threading
 import pafy
 import os
 import subprocess
@@ -52,15 +53,21 @@ def reboot(rpc_handle):
     ret  = commn.exec_cmd(rpc_handle,cmd,20)
     print ret
     
+def get_test_run():
+         headers = {"Content-Type": "application/json"}
+         print "assign cases"
+         global cases
+         cases = requests.get(settings.URL + 'get_tests/' + "726",auth=(settings.USR,settings.PWD),headers=headers)
+
 def get_run_for_case(case_id):
-           for case in cases.json():
-               if case_id == case['case_id']:
-                   return case['id']            #returning run id for given case id
+    for case in cases.json():
+        if case_id == case['case_id']:
+            return case['id']            #returning run id for given case id
 
 def get_title_for_case(case_id):
-          for case in cases.json():
-              if case_id == case['case_id']:
-                 return case['title']
+    for case in cases.json():
+        if case_id == case['case_id']:
+            return case['title']
 
 class USB_Modem(object):
      def __init__(self):
@@ -68,6 +75,7 @@ class USB_Modem(object):
              self.test_config = Dotable(json.load(json_file)) 
         self.modem_desc = dict()
         self.multi_modem_desc = dict()
+        self.cases =  None
         for channel in self.test_config["USBHub"]["channels"]:
             self.modem_desc[channel] = dict()
             self.multi_modem_desc[channel] = dict()
@@ -78,6 +86,22 @@ class USB_Modem(object):
          ssh_handle = commn.connect(host=self.test_config["edge"]["hostname"],login='root',password=self.test_config["edge"]["password"],port=22,handle_type="SSH")
          cmd = "nohup /root/qa/check_rpc_server.py --port 7777 &"
          commn.exec_cmd(ssh_handle,cmd,'#',120)
+
+     def check_rpc(self):
+         ssh_handle = commn.connect(host=self.test_config["edge"]["hostname"],login='root',password=self.test_config["edge"]["password"],port=22,handle_type="SSH")
+         cmd = "netstat -anp | grep 7777"     #RPC check -- check device listening on 7777, check_rpc process 
+         sshop = commn.exec_cmd(ssh_handle,cmd)
+         match1 = re.search('7777',sshop)
+         cmd = "ps -eaf | grep rpc"
+         sshop = commn.exec_cmd(ssh_handle,cmd)
+         match2 = re.search(r'[\w.]+\.py\s+--port\s+7777',sshop)
+         if match1 and match2:
+            print "RPC is running on edge"
+            return True
+         else:
+            return None
+
+          
 
      def Connect_to_Edge(self):
        try:
@@ -175,7 +199,7 @@ class USB_Modem(object):
             print ("Illegal IP")
             return None
 
-     def modem_insert_remove(self):
+     def single_modem_test(self):
         #In a loop activate one port at a time and disable other ports
         for channel in self.test_config["USBHub"]["channels"]:
             if self.test_config["USBHub"][channel]["status"] == "connected":
@@ -187,7 +211,6 @@ class USB_Modem(object):
                      print port
                      #self.EnablePort()
                      self.EnableChannel() # enable one channel on the edge
-                     print "network restart and sleep"
                      ret = self.basic_test_insert(multi=False) 
                      #reboot
                      self.DisableChannel()  # disable all channels after completing test
@@ -202,20 +225,25 @@ class USB_Modem(object):
                      else:
                         print "Could not perform reboot test"'''
                      print "----------TEST COMPLETE----------"
-                     #cmd = "vc_procmon restart" 
-                     #reply = commn.exec_cmd(self.rpc_handle,cmd,20)
+                     cmd = "/etc/init.d/network restart"
+                     reply = commn.exec_cmd(self.rpc_handle,cmd,20)
+                     time.sleep(5)
+                     cmd = "vc_procmon restart" 
+                     reply = commn.exec_cmd(self.rpc_handle,cmd,20)
                      print "----Sleeping for 20 seconds before starting next modem ---------"
                      time.sleep(20)
+                return ret
+        #disable the active port
+        #basic test remove 
+
+     def double_modem_test(self):
         #Multiple modems test
         self.active_set = "set1"
         self.EnableChannels(usb_set = 1)
         print "sleeping for 5 after activating two channels"
         time.sleep(5)
         ret = self.basic_test_insert(multi=True) 
-        return ret
-        #disable the active port
-        #basic test remove 
-     
+
      def modem_file(self,multi):
           #sleep for few seconds and check modem got detected (/etc/config/modems/modems)
          cmd = "cat /etc/config/modems/modems"
@@ -254,10 +282,10 @@ class USB_Modem(object):
                        match = re.search('product\s+(\S+)',line)
                        if match:
                            self.modem_desc[self.active_channel][self.active_port]["product"] = match.group(1)
-                       match = re.search('status\s+(\S+)',line)
+                       '''match = re.search('status\s+(\S+)',line)
                        if match:
                           self.modem_desc[self.active_channel][self.active_port]["status"] = match.group(1)
-                       break
+                       break'''
 
                     if multi == True:
                        match =  re.search('interface\s+(\S+)',line)
@@ -364,7 +392,7 @@ class USB_Modem(object):
                       path_not_established = 1
                       time.sleep(5)
                       path_count += 1
-                      if path_count >= 5:
+                      if path_count == 5:
                          cmd  = "usbreset "+self.modem_desc[self.active_channel][self.active_port]["product"]
                          reply = commn.exec_cmd(self.rpc_handle,cmd,20)
                          print reply
@@ -418,6 +446,9 @@ class USB_Modem(object):
                          if jobj[i]["vpnState"] != "STABLE" and jobj[i]["vpnState"] != "UNSTABLE" and link_count < 10:
                             print "Link unstable ..Waiting"
                             link_count += 1
+                            if link_count == 5:
+                               cmd  = "usbreset "+self.modem_desc[self.active_channel][self.active_port]["product"]
+                               reply = commn.exec_cmd(self.rpc_handle,cmd,20)
                             time.sleep(5)
                             link_not_established = 1
                             continue
@@ -534,7 +565,7 @@ class USB_Modem(object):
          p = multiprocessing.Process(target = download,args = (filename,))
          p.start()
          if p.is_alive():
-            time.sleep(2)
+            time.sleep(4)
             cmd = "ifconfig "+self.test_config["edge"]["ethernet"]+" down"       #Route Metric of ethernet link is always lower
             print "Ethernet link down"
             reply = commn.exec_cmd(self.rpc_handle,cmd,20)                       #compared to Modem
@@ -562,6 +593,13 @@ class USB_Modem(object):
                        self.modem_desc[self.active_channel][self.active_port]["failover"] = "failed" 
                     else:
                        self.modem_desc[self.active_channel][self.active_port]["backup"] = "failed"
+               else:     
+                  if backup != 1:
+                       self.modem_desc[self.active_channel][self.active_port]["failover"] = "failed"
+                  else:
+                       self.modem_desc[self.active_channel][self.active_port]["backup"] = "failed"
+                   
+                  
          else:
             print "failover test did not start"
             if backup != 1:
@@ -575,7 +613,9 @@ class USB_Modem(object):
          if ip_ethernet == None:
             print "Ethernet link did not come up"
          if os.path.isfile(filename):
-            os.remove(filename)       
+            os.remove(filename)  
+         if os.path.isfile(filename+".temp"):
+             os.remove(filename+".temp")     
          print self.modem_desc
          return True  
 
@@ -604,7 +644,7 @@ class USB_Modem(object):
          cmd = VCO_SCRIPTS_PATH+"/"+self.test_config["edge"]["wan_settings"]+" -a modifyinterfaceSetting"+" -v "+self.test_config["edge"]["vco"]+" -enterpriseName "+self.test_config["edge"]["enterprise"]+" -edgeName "+self.test_config["edge"]["name"]+" -configName 'Edge Specific Profile'"+" -configType WAN"+" -wanOverlayName overlay"+" -wanInterface "+self.modem_desc[self.active_channel][self.active_port]["interface"]+" -linkType PUBLIC "+" -wanOverlayType AUTO_DISCOVERED"+" -ethernetType WIRELESS"+" -backUpOnly False"
          os.system(cmd)
          print cmd
-         time.sleep(3)
+         time.sleep(10)
          backup = self.modem_link(1,multi=False)    #check backup link configuration
 
      def basic_test_insert(self,multi):
@@ -644,42 +684,7 @@ class USB_Modem(object):
         #basic_test_insert     
         return None   
 
-
-testrail = { 22501 : ["internet"],
-             22497 : ["product","proto","ip-address"],
-             22500 : ["gateway"],
-             22502 : ["nameserver"],
-
-             22527 : ["state","vpnState"],
-             22530 : "failover",
-             22531 : ["backup"]
-            }
-
-def get_test_run():
-     headers = {"Content-Type": "application/json"}
-     cases = requests.get(settings.URL + 'get_tests/' + "726",auth=(settings.USR,settings.PWD),headers=headers)
-     print cases.json() 
-
- 
-modem = USB_Modem()
-
-p = multiprocessing.Process(target = get_test_run,args = ())
-p.start()
-p.join(20)
-p.terminate()
-
-
-'''status = modem.start_rpc()
-time.sleep(5)
-status = modem.Connect_to_Edge()
-print status
-if status != None:
-   status = modem.modem_insert_remove()
-   if status == None:
-      sys.exit(0)
-   else:
-      print modem.modem_desc 
-
+def write_to_workbook(modem):
    try:
      wb = openpyxl.load_workbook(modem.test_config["edge"]["workbook"])                             
    except:
@@ -692,17 +697,22 @@ if status != None:
    except:
       print "Default sheet already removed" 
 
-   sheet_names = wb.get_sheet_names()
    for channel in modem.test_config["USBHub"]["channels"]:
        if modem.test_config["USBHub"][channel]["status"] == "connected":
           for port in modem.test_config["USBHub"]["ports"]: 
              if modem.test_config["USBHub"][channel][port] == "connected":
                 prev_title = ((modem.modem_desc[channel][port]["product"]).replace(':','-')).strip('\'')
+                sheet_names = wb.get_sheet_names()
                 if prev_title in sheet_names:
                    print "getting from old sheet"
                    ws = wb.get_sheet_by_name(prev_title)
                    wb.remove_sheet(ws)
-               
+
+   for channel in modem.test_config["USBHub"]["channels"]:
+       if modem.test_config["USBHub"][channel]["status"] == "connected":
+          for port in modem.test_config["USBHub"]["ports"]: 
+             if modem.test_config["USBHub"][channel][port] == "connected":
+                               
                 print "creating new sheet"
                 ws = wb.create_sheet()
                 title = str((modem.modem_desc[channel][port]["product"]).replace(':','-'))
@@ -720,7 +730,11 @@ if status != None:
                      ws.cell(row = row_count,column = 2).font = FontStyle
                      row_count += 1
 
-                result_row_count = 1 
+                result_row_count = 2
+                ws.cell(row = 1,column = 4).value = 'Testcase ID'
+                ws.cell(row = 1,column = 5).value = 'Testrun ID'
+                ws.cell(row = 1,column = 6).value = 'Test Result' 
+                ws.cell(row = 1,column = 7).value = 'Test case Title'
                 for key,value in testrail.items():
                      run_id = get_run_for_case(key)                
                      title = get_title_for_case(key)
@@ -755,7 +769,8 @@ if status != None:
         
                              
    wb.save(modem.test_config["edge"]["workbook"])   
-
+ 
+def upload_to_testrail(modem):
    tcflush(sys.stdin, TCIFLUSH)
    user_input = raw_input("Upload results to testrail ? [y/n]: ")
    print user_input
@@ -767,7 +782,7 @@ if status != None:
       print sheet_names 
       
       #Update testrail
-      sheet_row_count = 1
+      sheet_row_count = 2
       while sheet_row_count <=  result_row_count:
             fail_flag = 0
             success_comment =  " "
@@ -795,5 +810,138 @@ if status != None:
                fields = { "assignedto_id": 2, "comment": failure_comment,"status_id": 5,"elapsed": 0,"version": modem.edge_version,"defects": "" }
                req = requests.post(settings.URL + 'add_result/' + str(ws.cell(row = sheet_row_count,column= 5).value),auth=(settings.USR, settings.PWD), headers=headers,data=json.dumps(fields))
             sheet_row_count += 1
+
+def send_mail():
+    wb = openpyxl.load_workbook("modem-test-result.xlsx")
+    sheet_names = wb.get_sheet_names()
+    print sheet_names
+    
+    string =  "<html>"
+    string = string+ "<font face=\"courier\" color=\"grey\" size=\"2\">" 
+    string = string+ "*** This is an automatically generated email ***<br><br>"
+    string  = string+"</font>" 
+    string = string + "<font face=\"courier\" color=\"blue\" size=\"2\">" 
+    string = string+ "<br><br>" 
+    string = string+"</font>" 
+    for sheet in sheet_names:
+         ws = wb.get_sheet_by_name(sheet)
+         string  = string+ "<table border=\"2\">"
+         string = string+ "<tr><th>"+str(ws.cell(row = 1,column=1).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 2,column=1).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 3,column=1).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 4,column=1).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 5,column=1).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 6,column=1).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 7,column=1).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 8,column=1).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 9,column=1).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 10,column=1).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 11,column=1).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 12,column=1).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 13,column=1).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 14,column=1).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 15,column=1).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 16,column=1).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 17,column=1).value)+"</th></tr><br><br>"
+         
+         string = string+ "<tr><th>"+str(ws.cell(row = 1,column=2).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 2,column=2).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 3,column=2).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 4,column=2).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 5,column=2).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 6,column=2).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 7,column=2).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 8,column=2).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 9,column=2).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 10,column=2).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 11,column=2).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 12,column=2).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 13,column=2).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 14,column=2).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 15,column=2).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 16,column=2).value)+"</th>"
+         string  = string +"<th>"+str(ws.cell(row = 17,column=2).value)+"</th></tr>" 
+    
+         string  = string+ "<table border=\"2\">"
+              string  =string+ "<tr><th>"+str(ws.cell(row = 1,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 1,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 1,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 1,column=6).value)+"</th><br><br>"
+              string  =string+ "<tr><th>"+str(ws.cell(row = 2,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 2,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 2,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 2,column=6).value)+"</th><br><br>"
+              string  =string+ "<tr><th>"+str(ws.cell(row = 3,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 3,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 3,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 3,column=6).value)+"</th><br><br>"
+              string  =string+ "<tr><th>"+str(ws.cell(row = 4,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 4,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 4,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 4,column=6).value)+"</th><br><br>"
+              string  =string+ "<tr><th>"+str(ws.cell(row = 5,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 5,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 5,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 5,column=6).value)+"</th><br><br>"
+              string  =string+ "<tr><th>"+str(ws.cell(row = 6,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 6,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 6,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 6,column=6).value)+"</th><br><br>"
+              string  =string+ "<tr><th>"+str(ws.cell(row = 7,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 7,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 7,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 7,column=6).value)+"</th><br><br>"
+              string  =string+ "<tr><th>"+str(ws.cell(row = 8,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 8,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 8,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 8,column=6).value)+"</th></tr></table>"
+    
+    string = string + "</font></html>"
+    
+         msg =  MIMEText(string,'html')
+         msg["From"] = "nirmal.kumar@velocloud.net"
+         msg["To"] = "nirmal.kumar@velocloud.net"
+         msg["Subject"] = "Modem Automation Report - Test email"
+         p = Popen(["/usr/sbin/sendmail","-t","oi"],stdin=PIPE ,universal_newlines=True)
+         p.communicate(msg.as_string())      
+       
+#####################################################################################################################################################################################################
+
+testrail = { 22501 : ["internet"],
+             22497 : ["product","proto","ip-address"],
+             22500 : ["gateway"],
+             22502 : ["nameserver"],
+
+             22527 : ["state","vpnState"],
+             22530 : "failover",
+             22531 : ["backup"]
+            }
+
+####### Get info from testrail for testrun ############
+
+t = threading.Thread(target = get_test_run,args = ())
+#modem.get_test_run()
+t.daemon = True
+t.start()
+t.join()
+print cases.json()
+
+#######################################################
+
+
+####### initialise and check rpc on edge #############
+
+modem = USB_Modem()
+modem.start_rpc()
+time.sleep(3)
+rpc_status = modem.check_rpc()
+if rpc_status ==  None:
+   print "RPC is not running on edge" 
+   sys.exit(0) 
+time.sleep(5)
+
+######################################################
+
+
+######## Connect to Edge and start test ############## 
+
+edge_status = modem.Connect_to_Edge()
+print edge_status
+if edge_status != None:
+   status = modem.single_modem_test()
+   if status == None:
+      sys.exit(0)
+   else:
+      print modem.modem_desc 
+
+######################################################
+   
+write_to_workbook(modem)
+upload_to_testrail(modem)
+send_mail()
+
+#####################################################
+
+status =  modem.double_modem_test()
+if status == None:
+   sys.exit(0)
 else:
-   print "Test Initialisation failed"''' 
+   print modem.multi_modem_desc 
+
+
