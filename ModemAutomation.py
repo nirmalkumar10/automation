@@ -1,4 +1,5 @@
 import json
+import pull
 import sys
 import qa_env
 import commn
@@ -18,7 +19,14 @@ from openpyxl.styles import Font, Color
 from openpyxl.styles import colors
 import settings
 import requests
+import fnmatch
+import VcoSetup
 from termios import tcflush, TCIFLUSH
+import paramiko
+from paramiko import SSHClient
+from scp import SCPClient
+from email.mime.text import MIMEText
+from subprocess import Popen, PIPE
 
 VCO_SCRIPTS_PATH = qa_env._VCO_SCRIPTS_ROOT + str(qa_env._VCO_VERSION)
 
@@ -48,6 +56,24 @@ def download(filename):
        return None
     return filename
 
+def local_interface(interface):
+    tcflush(sys.stdin, TCIFLUSH)
+    os.setuid(os.geteuid())
+    cmd = "sudo ifconfig "+interface+" down"
+    os.system(cmd)
+    time.sleep(2)
+    
+    tcflush(sys.stdin, TCIFLUSH)
+    os.setuid(os.geteuid())
+    cmd = "sudo ifconfig "+interface+" up"
+    os.system(cmd)
+    time.sleep(3) 
+
+def remove_known_hosts():
+    cmd =  "rm ~/.ssh/known_hosts"
+    if os.path.isfile("~/.ssh/known_hosts"):
+       os.system(cmd)
+ 
 def reboot(rpc_handle):
     cmd = "reboot"
     ret  = commn.exec_cmd(rpc_handle,cmd,20)
@@ -101,7 +127,69 @@ class USB_Modem(object):
          else:
             return None
 
+     def send_image_to_edge(self):
+         ssh = SSHClient()
+         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+         ssh.load_system_host_keys(os.path.expanduser("~/.ssh/known_hosts"))
+         ssh.connect(self.test_config["edge"]["hostname"],username=self.test_config["edge"]["login"],password=self.test_config["edge"]["password"])
+         
+         # SCPCLient takes a paramiko transport as its only argument
+         scp = SCPClient(ssh.get_transport())
+         for file in os.listdir('/tmp/'+self.current_build):
+             if fnmatch.fnmatch(file, "edge-imageupdate-"+self.test_config["edge"]["model"]+"*"+".zip"):
+                scp.put("/tmp/"+self.current_build+"/"+file, '~/')
+                print "filematch:"+file 
+                self.edge_image_file = file
+         scp.close()
+     
+
+     def send_image_to_gateway(self):
+         ssh = SSHClient()
+         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+         ssh.connect("52.9.182.185", username="ubuntu", password="None", key_filename="dev-uswest.pem")
+         scp = SCPClient(ssh.get_transport())
+        
+         for file in os.listdir('/tmp/'+self.current_build):
+             if fnmatch.fnmatch(file, "gatewayd*"+".deb"):
+                scp.put("/tmp/"+self.current_build+"/"+file, '~/')
+                print "filematch:"+file
+                self.gw_image_file = file         
+ 
+         scp.close()
+         ssh.close()
+
+     def install_edge_image(self):
+         cmd = "/root/swupdater "+self.edge_image_file     
+         ssh_handle = commn.connect(host=self.test_config["edge"]["hostname"],login='root',password=self.test_config["edge"]["password"],port=22,handle_type="SSH")
+         print "Installing Image:" +cmd
+         ssh_op = commn.exec_cmd(ssh_handle,cmd)
+         print "Sleep for 180 secs before connecting again"
+         time.sleep(180)
+
+     def activate_edge(self): 
+         cmd = "ls \/opt\/vc\/.edge.info"
+         commn.logg_add('INFO', output)
+         ssh_handle = commn.connect(host=self.test_config["edge"]["hostname"],login='root',password=self.test_config["edge"]["password"],port=22,handle_type="SSH")
+         output = commn.exec_cmd(handle, cmd, prompt='# ')
+         if not 'No such file' in output:
+           cmd = 'rm -f \/opt\/vc\/.edge.info'
+           output = commn.exec_cmd(handle, cmd, prompt='# ')     
+           cmd = '/opt/vc/bin/vc_procmon restart'
+           output = commn.exec_cmd(handle, cmd, prompt)
+           time.sleep(40) 
+         
           
+     def install_gw_image(self):
+         cmd ="sudo dpkg -i "+self.gw_image_file+ " -f"
+         print cmd
+         ssh = SSHClient()
+         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+         ssh.connect("52.9.182.185", username="ubuntu", password="None", key_filename="dev-uswest.pem")
+         stdin, stdout, stderr = ssh.exec_command('ls')
+         print stdout.readlines()
+         stdin, stdout, stderr = ssh.exec_command(cmd)
+         time.sleep(30)
+         ssh.close()
 
      def Connect_to_Edge(self):
        try:
@@ -232,7 +320,7 @@ class USB_Modem(object):
                      reply = commn.exec_cmd(self.rpc_handle,cmd,20)
                      print "----Sleeping for 20 seconds before starting next modem ---------"
                      time.sleep(20)
-                return ret
+        return ret
         #disable the active port
         #basic test remove 
 
@@ -623,7 +711,7 @@ class USB_Modem(object):
          # make usb modem backup only
          backup_wait = 0
          backup = 0
-         cmd = VCO_SCRIPTS_PATH+"/"+self.test_config["edge"]["wan_settings"]+" -a modifyinterfaceSetting"+" -v "+self.test_config["edge"]["vco"]+" -enterpriseName "+self.test_config["edge"]["enterprise"]+" -edgeName "+self.test_config["edge"]["name"]+" -configName 'Edge Specific Profile'"+" -configType WAN"+" -wanOverlayName overlay"+" -wanInterface "+self.modem_desc[self.active_channel][self.active_port]["interface"]+" -linkType PUBLIC "+" -wanOverlayType AUTO_DISCOVERED"+" -ethernetType WIRELESS"+" -backUpOnly True"
+         cmd = VCO_SCRIPTS_PATH+"/"+self.test_config["edge"]["wan_settings"]+" -a modifyinterfaceSetting"+" -v "+self.test_config["edge"]["vco"]+" -enterpriseName "+self.test_config["edge"]["enterprise"]+" -edgeName "+self.test_config["edge"]["enterprise"]+"-EDGE-1 "+" -configName 'Edge Specific Profile'"+" -configType WAN"+" -wanOverlayName overlay"+" -wanInterface "+self.modem_desc[self.active_channel][self.active_port]["interface"]+" -linkType PUBLIC "+" -wanOverlayType AUTO_DISCOVERED"+" -ethernetType WIRELESS"+" -backUpOnly True"
          os.system(cmd)
          print cmd
          time.sleep(10)
@@ -641,7 +729,7 @@ class USB_Modem(object):
          else:
             print "Backup link configuration failed"
 
-         cmd = VCO_SCRIPTS_PATH+"/"+self.test_config["edge"]["wan_settings"]+" -a modifyinterfaceSetting"+" -v "+self.test_config["edge"]["vco"]+" -enterpriseName "+self.test_config["edge"]["enterprise"]+" -edgeName "+self.test_config["edge"]["name"]+" -configName 'Edge Specific Profile'"+" -configType WAN"+" -wanOverlayName overlay"+" -wanInterface "+self.modem_desc[self.active_channel][self.active_port]["interface"]+" -linkType PUBLIC "+" -wanOverlayType AUTO_DISCOVERED"+" -ethernetType WIRELESS"+" -backUpOnly False"
+         cmd = VCO_SCRIPTS_PATH+"/"+self.test_config["edge"]["wan_settings"]+" -a modifyinterfaceSetting"+" -v "+self.test_config["edge"]["vco"]+" -enterpriseName "+self.test_config["edge"]["enterprise"]+" -edgeName "+ self.test_config["edge"]["enterprise"]+"-EDGE-1 "+" -configName 'Edge Specific Profile'"+" -configType WAN"+" -wanOverlayName overlay"+" -wanInterface "+self.modem_desc[self.active_channel][self.active_port]["interface"]+" -linkType PUBLIC "+" -wanOverlayType AUTO_DISCOVERED"+" -ethernetType WIRELESS"+" -backUpOnly False"
          os.system(cmd)
          print cmd
          time.sleep(10)
@@ -863,16 +951,16 @@ def send_mail():
          string  = string +"<th>"+str(ws.cell(row = 17,column=2).value)+"</th></tr>" 
     
          string  = string+ "<table border=\"2\">"
-              string  =string+ "<tr><th>"+str(ws.cell(row = 1,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 1,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 1,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 1,column=6).value)+"</th><br><br>"
-              string  =string+ "<tr><th>"+str(ws.cell(row = 2,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 2,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 2,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 2,column=6).value)+"</th><br><br>"
-              string  =string+ "<tr><th>"+str(ws.cell(row = 3,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 3,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 3,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 3,column=6).value)+"</th><br><br>"
-              string  =string+ "<tr><th>"+str(ws.cell(row = 4,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 4,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 4,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 4,column=6).value)+"</th><br><br>"
-              string  =string+ "<tr><th>"+str(ws.cell(row = 5,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 5,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 5,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 5,column=6).value)+"</th><br><br>"
-              string  =string+ "<tr><th>"+str(ws.cell(row = 6,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 6,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 6,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 6,column=6).value)+"</th><br><br>"
-              string  =string+ "<tr><th>"+str(ws.cell(row = 7,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 7,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 7,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 7,column=6).value)+"</th><br><br>"
-              string  =string+ "<tr><th>"+str(ws.cell(row = 8,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 8,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 8,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 8,column=6).value)+"</th></tr></table>"
+         string  =string+ "<tr><th>"+str(ws.cell(row = 1,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 1,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 1,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 1,column=6).value)+"</th><br><br>"
+         string  =string+ "<tr><th>"+str(ws.cell(row = 2,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 2,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 2,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 2,column=6).value)+"</th><br><br>"
+         string  =string+ "<tr><th>"+str(ws.cell(row = 3,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 3,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 3,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 3,column=6).value)+"</th><br><br>"
+         string  =string+ "<tr><th>"+str(ws.cell(row = 4,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 4,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 4,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 4,column=6).value)+"</th><br><br>"
+         string  =string+ "<tr><th>"+str(ws.cell(row = 5,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 5,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 5,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 5,column=6).value)+"</th><br><br>"
+         string  =string+ "<tr><th>"+str(ws.cell(row = 6,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 6,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 6,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 6,column=6).value)+"</th><br><br>"
+         string  =string+ "<tr><th>"+str(ws.cell(row = 7,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 7,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 7,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 7,column=6).value)+"</th><br><br>"
+         string  =string+ "<tr><th>"+str(ws.cell(row = 8,column=4).value)+"</th>"+"<th>"+str(ws.cell(row = 8,column=5).value)+"</th>"+"<th>"+str(ws.cell(row = 8,column=7).value)+"</th>"+"<th>"+str(ws.cell(row = 8,column=6).value)+"</th></tr></table>"
     
-    string = string + "</font></html>"
+         string = string + "</font></html>"
     
          msg =  MIMEText(string,'html')
          msg["From"] = "nirmal.kumar@velocloud.net"
@@ -905,9 +993,63 @@ print cases.json()
 #######################################################
 
 
-####### initialise and check rpc on edge #############
+####### initialise  #############
 
 modem = USB_Modem()
+
+######################################################
+
+remove_known_hosts()
+
+##########   Setup devices in VCO  ##################
+
+Vco = VcoSetup.init_setup()
+if modem.test_config["edge"]["upgrade"] == "true":
+   print "upgrade is true"
+   if Vco.get_enterpriseId() != None:
+      Vco.delete_Profile()
+      print "Refreshing local edge interface for new IP"
+      local_interface(modem.test_config["edge"]["lo-intf"])
+      remove_known_hosts()
+      Vco.delete_gateway()
+      Vco.delete_gatewayPool()
+  
+   Vco.create_gatewayPool()
+   Vco.create_gateway()
+   if Vco.get_enterpriseId() == None:
+      Vco.create_Profile(modem.test_config["edge"]["enterprise"])
+      Vco.create_edge_at_vco()
+elif modem.test_config["edge"]["upgrade"] != "true":
+     Vco.get_gatewayPool() == False or Vco.get_gateway == False or  Vco.get_enterpriseId() == None
+     print "Required Enterprise not present in VCO - Upgrade required"
+#####################################################
+
+#########     Download and install  Images ###########
+#job_name  = modem.test_config["edge"]["release"]
+#build_id = modem.test_config["edge"]["build"]
+#outdir = "/tmp"
+#artifact_patterns = ['*.deb' , '*'+ modem.test_config["edge"]["model"]+'*'+'.zip']
+#modem.curirent_build = pull.download_image(job_name,build_id,outdir,artifact_patterns)
+#print "current build:"+ modem.current_build
+if modem.test_config["edge"]["upgrade"] == "true":
+   Vco.download_images()
+   Vco.send_image_to_edge()
+   Vco.install_edge_image()
+   Vco.send_image_to_gateway()
+   Vco.install_gw_image()
+   Vco.activate_edge()
+   Vco.activate_gateway()
+#####################################################
+remove_known_hosts()
+
+time.sleep(3)
+local_interface(modem.test_config["edge"]["lo-intf"])
+time.sleep(10)
+######## Connect to Edge and start test ############## 
+
+Vco.send_rpc_to_edge()
+time.sleep(4)
+
 modem.start_rpc()
 time.sleep(3)
 rpc_status = modem.check_rpc()
@@ -915,15 +1057,10 @@ if rpc_status ==  None:
    print "RPC is not running on edge" 
    sys.exit(0) 
 time.sleep(5)
-
-######################################################
-
-
-######## Connect to Edge and start test ############## 
-
 edge_status = modem.Connect_to_Edge()
 print edge_status
 if edge_status != None:
+   print "PASS"
    status = modem.single_modem_test()
    if status == None:
       sys.exit(0)
@@ -938,10 +1075,10 @@ send_mail()
 
 #####################################################
 
-status =  modem.double_modem_test()
+'''status =  modem.double_modem_test()
 if status == None:
    sys.exit(0)
 else:
-   print modem.multi_modem_desc 
+   print modem.multi_modem_desc '''
 
 

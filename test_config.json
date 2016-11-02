@@ -1,20 +1,29 @@
 {
 "edge":{
        "login" : "root",
-       "name" : "edge500",
+       "name" : "edge20",
+       "model" : "EDGE500",
        "hostname" : "edge.velocloud.net",
-       "password" : "velo",
+       "password" : "VeloHello713",
        "ethernet" : "internet1",
-       "enterprise" : "Nirmal-customer",
+       "lo-intf" : "en4",
        "vco" : "52.52.71.56",
+       "build" : "latest",
+       "upgrade" : "false",
+       "release" : "Release-2.1",
+       "gatewayIp" : "52.9.182.185",
+       "gwPoolName" : "modem-pool",
+       "GwName" : "modem-gateway",
+       "gatewayLocation" : "Mt-View", 
+       "enterprise" : "modem-enterprise",
        "workbook" : "modem-test-result.xlsx",
-        "wan_settings" : "EdgeWanOverLay.js",
+       "wan_settings" : "EdgeWanOverLay.js",
         "test_run" : "726",
         "USB1" : "\"1-1.2\"",
         "USB2" : "\"1-1.1\"",
         "USB3" : "\"1-1.4\"",
         "USB4" : "\"1-1.3\""
-       },
+         },
 "USBHub":{
 "channels": ["USB1","USB2","USB3","USB4"],
 "set1" : ["USB1","USB2"],
@@ -32,8 +41,8 @@
 "USB3" :{
        "status": "connected",
        "0" : "connected"
-       }, 
-"USB4" :{ 
+       },
+"USB4" :{
        "status" :"connected",
        "0" : "connected"
        }
