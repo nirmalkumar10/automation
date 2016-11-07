@@ -1,0 +1,394 @@
+<!doctype html>
+
+<title>Test</title> 
+<meta charset=utf-8> 
+
+
+
+<html>
+
+<head>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+
+    <!-- Optional theme -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp" crossorigin="anonymous">
+
+    <!-- JQuery Google CDN -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+
+    <!-- Latest compiled and minified JavaScript -->
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+    <style>
+        
+        form {
+            width: 90%;
+            margin: 0 auto;
+        }
+    
+    label, input {
+        display: inline-block;
+        
+    }
+    
+    label {
+        width: 40%;
+        text-align: right;
+        
+    }
+    
+    
+    input + input {
+        float: right;
+    }
+    
+    table {
+        width: 140%;
+    }
+        
+        </style>
+    <script type="text/javascript">
+        $(function () { //equal to $(document).ready() {
+
+            function download(data, filename) {
+                var a = document.createElement("a"),
+                    file = new Blob([data], {
+                        type: "json"
+                    });
+                if (window.navigator.msSaveOrOpenBlob) // IE10+
+                    window.navigator.msSaveOrOpenBlob(file, filename);
+                else { // Others
+                    var url = URL.createObjectURL(file);
+                    a.href = url;
+                    a.download = filename + ".json";
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(function () {
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+                    }, 0);
+                }
+            }
+
+  
+
+
+            $('#jsoncreate').click(function () {
+
+                var jsonArg1 = new Object();
+                jsonArg1.login = $('#login').val();
+                jsonArg1.name = $('#name').val();
+                var m = document.getElementById("model");
+                jsonArg1.model = m.options[m.selectedIndex].text;
+                var h = document.getElementById("hostname");
+                jsonArg1.hostname = h.options[h.selectedIndex].text;
+                jsonArg1.password = $('#password').val();
+                jsonArg1.hostpswd = $('#hostpswd').val();
+                //dropdownbox
+                var e = document.getElementById("ethernet");
+                jsonArg1.ethernet = e.options[e.selectedIndex].text;
+                jsonArg1.lointf = $('#lointf').val();
+                jsonArg1.vco = $('#vco').val();
+                jsonArg1.build = $('#build').val();
+                var u = document.getElementById("upgrade");
+                jsonArg1.upgrade = u.options[u.selectedIndex].text;
+                jsonArg1.release = $('#release').val();
+                jsonArg1.gatewayIp = $('#gatewayIp').val();
+                jsonArg1.gwPoolName = $('#gwPoolName').val();
+                jsonArg1.GwName = $('#GwName').val();
+                jsonArg1.gatewayLocation = $('#gatewayLocation').val();
+                jsonArg1.enterprise = $('#enterprise').val();
+                jsonArg1.workbook = $('#workbook').val();
+                jsonArg1.test_run = $('#test_run').val();
+                jsonArg1.USB1 = $('#USB1').val();
+                jsonArg1.USB2 = $('#USB2').val();
+                jsonArg1.USB3 = $('#USB3').val();
+                jsonArg1.USB4 = $('#USB4').val();
+                                
+                                   
+                var jsonArg2 = new Object();
+                var c = document.getElementById("channels");
+                list = c.options[c.selectedIndex].text;
+                jsonArg2.channels = list
+                objtemp = JSON.stringify(jsonArg2)
+                obj2 = objtemp.slice(1,-1)
+                                
+                var jsonArg21 = new Object();
+                var p = document.getElementById("ports");
+                jsonArg21.ports = p.options[p.selectedIndex].text;
+                objtemp = JSON.stringify(jsonArg21)
+                obj21 = objtemp.slice(1,-1)
+
+                                   
+                var jsonArg3 = new Object();
+                var s1 = document.getElementById("status1");
+                var s10 = document.getElementById("port1");
+                jsonArg3.status = s1.options[s1.selectedIndex].text;
+                jsonArg3.zero = s10.options[s10.selectedIndex].text;
+                var jsonArg4 = new Object();
+                var s2 = document.getElementById("status2");
+                var s20 = document.getElementById("port2");
+                jsonArg4.status = s2.options[s2.selectedIndex].text;
+                jsonArg4.zero = s20.options[s20.selectedIndex].text;
+                var jsonArg5 = new Object();
+                var s3 = document.getElementById("status3");
+                var s30 = document.getElementById("port3");
+                jsonArg5.status = s3.options[s3.selectedIndex].text;
+                jsonArg5.zero= s30.options[s30.selectedIndex].text;
+                var jsonArg6 = new Object();
+                var s4 = document.getElementById("status4");
+                var s40 = document.getElementById("port4");
+                jsonArg6.status = s4.options[s4.selectedIndex].text;
+                jsonArg6.zero = s40.options[s40.selectedIndex].text;
+                                   
+                var postData = '{"edge":' + JSON.stringify(jsonArg1)+','+'"USBHub":{'+ obj2 +','+obj21+',"USB1":'+JSON.stringify(jsonArg3)+',"USB2":'+JSON.stringify(jsonArg4)+',"USB3":'+JSON.stringify(jsonArg5)+',"USB4":'+JSON.stringify(jsonArg6)+'}}';
+                console.log(postData);
+                download(postData, "test_config")
+
+            });
+        });
+      
+    </script>
+</head>
+
+<body>
+    <header>
+        
+       <center> <img src="velocloudlogo.png" height="60" width="200"/></center>
+        </header>
+
+    <div id="loginbox" style="margin:10px 5px 15px 10%; " class="mainbox col-md-6 col-md-offset-3 col-sm-8 col-sm-offset-2">
+        <form id="assigneecheck" name="jsonform" method="post">
+            <fieldset>
+                <legend style="font-family: courier; margin-left:320px";> <h2>USB Modem Automation</h2></legend>
+                <table>
+                    
+                    <col width="10%">
+                        <col width="40%">
+                            <col width="50%">
+                                
+                    <tr>
+                        <td  align= "center" >
+                            
+                            <div class="form-group form-inline">
+                                <button class="btn btn-primary " id="jsoncreate" type="button">Submit Configuration</button><br><br>
+                                <a href="/get_config/">   <button class="btn btn-primary " id="get_config" type="button">Get Configuration</button></a><br><br>
+                                <a href="/del_config/">   <button class="btn btn-primary " id="del_config" type="button">Delete Configuration</button></a><br><br>
+                                <button class="btn btn-primary " name="clear" type="clear">Clear Fields</button><br><br><br><br><br>
+                              <a href="/my-link/">  <button class="btn btn-success" id="StartTest" type="button">Start Modem Test</button></a><br><br><br><br>
+                              <a href="/refresh/">   <button class="btn btn-primary " id="RefreshInterface" type="button">Refresh Interface</button></a><br><br>
+                              <a href="/ping/">   <button class="btn btn-primary " id="ping" type="button">Ping Test</button></a><br><br>
+                            
+                            </td>
+                            
+                        <td>
+                            <div class="form-group" >
+                                <!-- Name field -->
+                                <label class="control-label " for="login">Login</label>
+                                <input  id="login" name="login" type="text" />
+                            </div>
+                            <div class="form-group" >
+                                <!-- project field -->
+                                <label class="control-label " for="name">Edge Name</label>
+                                <input  id="name" name="name" type="text" />
+                                <div class="form-group dropdown">
+                                    <label class="control-label " for="model">Edge Model</label>
+                                    <select id="model" name="model">
+                                        <option value="EDGE500">EDGE500</option>
+                                        <option value="EDGE5X0">EDGE5X0</option>
+                                    </select>
+                                </div>
+                                <div class="form-group dropdown">
+                                    <label class="control-label " for="model">HostName</label>
+                                    <select id="hostname" name="hostname">
+                                        <option value="edge.velocloud.net">edge.velocloud.net</option>
+                                    </select>
+                                </div>
+                                
+                                
+                                
+                                
+                                <div class="form-group">
+                                    <!-- vertical field -->
+                                    <label class="control-label " for="password">Edge Password</label>
+                                    <input  id="password" name="password" type="text" />
+                                </div>
+                                <div class="form-group">
+                                    <!-- vertical field -->
+                                    <label class="control-label " for="hostpswd">HostPassword</label>
+                                    <input  id="hostpswd" name="hostpswd" type="text" />
+                                </div>
+                                <div class="form-group dropdown">
+                                    <label class="control-label " for="ethernet">Ethernet Wan</label>
+                                    <select id="ethernet" name="ethernet">
+                                        <option value="internet1">internet1</option>
+                                        <option value="internet2">internet2</option>
+                                        <option value="ge1">ge1</option>
+                                        <option value="ge2">ge2</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <!-- vertical field -->
+                                    <label class="control-label " for="lointf">LocalInterface</label>
+                                    <input  id="lointf" name="lointf" type="text" />
+                                </div>
+                                <div class="form-group">
+                                    <!-- vertical field -->
+                                    <label class="control-label " for="vco">VCO</label>
+                                    <input  id="vco" name="vco" type="text" />
+                                </div>
+                                <div class="form-group">
+                                    <!-- vertical field -->
+                                    <label class="control-label " for="build">Build</label>
+                                    <input  id="build" name="build" type="text" />
+                                </div>
+                                <div class="form-group dropdown">
+                                    <label class="control-label " for="upgrade">Upgrade</label>
+                                    <select id="upgrade" name="upgrade">
+                                        <option value="true">true</option>
+                                        <option value="false">false</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <!-- vertical field -->
+                                    <label class="control-label " for="release">Release</label>
+                                    <input  id="release" name="release" type="text" />
+                                </div>
+                                <div class="form-group">
+                                    <!-- vertical field -->
+                                    <label class="control-label " for="gatewayIP">GatewayIP</label>
+                                    <input  id="gatewayIp" name="gatewayIp" type="text" />
+                                </div>
+                                <div class="form-group">
+                                    <!-- vertical field -->
+                                    <label class="control-label " for="gwPoolName">GatewayPoolName</label>
+                                    <input  id="gwPoolName" name="gwPoolName" type="text" />
+                                </div>
+                                <div class="form-group">
+                                    <!-- vertical field -->
+                                    <label class="control-label " for="GwName">GatewayName</label>
+                                    <input  id="GwName" name="GwName" type="text" />
+                                </div>
+                                <div class="form-group">
+                                    <!-- vertical field -->
+                                    <label class="control-label " for="gatewayLocation">GatewayLocation</label>
+                                    <input  id="gatewayLocation" name="gatewayLocation" type="text" />
+                                </div>
+                                <div class="form-group">
+                                    <!-- vertical field -->
+                                    <label class="control-label " for="enterprise">Enterprise</label>
+                                    <input  id="enterprise" name="enterprise" type="text" />
+                                </div>
+                                <div class="form-group">
+                                    <!-- vertical field -->
+                                    <label class="control-label " for="workbook">Workbook</label>
+                                    <input  id="workbook" name="workbook" type="text" />
+                                </div>
+
+                        
+                        </td>
+                        <td >
+                                <div class="form-group">
+                    <!-- vertical field -->
+                    <label class="control-label " for="test_run">Test Run</label>
+                    <input  id="test_run" name="test_run" type="text" />
+                </div>
+                <div class="form-group">
+                    <!-- vertical field -->
+                    <label class="control-label " for="USB1">USB1</label>
+                    <input  id="USB1" name="USB1" type="text" />
+                </div>
+                <div class="form-group">
+                    <!-- vertical field -->
+                    <label class="control-label " for="USB2">USB2</label>
+                    <input  id="USB2" name="USB2" type="text" />
+                </div>
+                <div class="form-group">
+                    <!-- vertical field -->
+                    <label class="control-label " for="USB3">USB3</label>
+                    <input  id="USB3" name="USB3" type="text" />
+                </div>
+                <div class="form-group">
+                    <!-- vertical field -->
+                    <label class="control-label " for="USB4">USB4</label>
+                    <input  id="USB4" name="USB4" type="text" />
+                </div>
+                <div class="form-group dropdown">
+                    <label class="control-label " for="channels">Channels</label>
+                    <select id="channels" name="channels">
+                        <option value="["USB1","USB2","USB3","USB4"]">[USB1,USB2,USB3,USB4]</option>
+                    </select>
+                </div>
+                <div class="form-group dropdown">
+                    <label class="control-label " for="ports">USB Ports</label>
+                    <select id="ports" name="ports">
+                        <option value="["zero"]">"["zero"]"</option>
+                        <option value="["zero","one"]">"["zero","one"]"</option>
+                        <option value="["zero","one","two"]">"["zero"","one","two"]"</option>
+                        <option value="["zero","one","two","three"]">"["zero","one","two","three"]"</option>
+                    </select>
+                </div>
+                   <div class="form-group dropdown">
+                    <label class="control-label " for="status1">USB1Status</label>
+                    <select id="status1" name="status1">
+                        <option value="connected">connected</option>
+                        <option value="disconnected">disconnected</option>
+                    </select>
+                </div>
+                <div class="form-group dropdown">
+                    <label class="control-label " for="port1">USB1portStatus</label>
+                    <select id="port1" name="port1">
+                        <option value="connected">connected</option>
+                        <option value="disconnected">disconnected</option>
+                    </select>
+                </div>
+                <div class="form-group dropdown">
+                    <label class="control-label " for="status2">USB2Status</label>
+                    <select id="status2" name="status2">
+                        <option value="connected">connected</option>
+                        <option value="disconnected">disconnected</option>
+                    </select>
+                </div>
+                <div class="form-group dropdown">
+                    <label class="control-label " for="port2">USB2PortStatus</label>
+                    <select id="port2" name="port2">
+                        <option value="connected">connected</option>
+                        <option value="disconnected">disconnected</option>
+                    </select>
+                </div>
+                <div class="form-group dropdown">
+                    <label class="control-label " for="status3">USB3Status</label>
+                    <select id="status3" name="status3">
+                        <option value="connected">connected</option>
+                        <option value="disconnected">disconnected</option>
+                    </select>
+                </div>
+                <div class="form-group dropdown">
+                    <label class="control-label " for="port3">USB3Port3Status</label>
+                    <select id="port3" name="port3">
+                        <option value="connected">connected</option>
+                        <option value="disconnected">disconnected</option>
+                    </select>
+                </div>
+                <div class="form-group dropdown">
+                    <label class="control-label " for="status4">USB4Status</label>
+                    <select id="status4" name="status4">
+                        <option value="connected">connected</option>
+                        <option value="disconnected">disconnected</option>
+                    </select>
+                </div>
+                <div class="form-group dropdown">
+                    <label class="control-label " for="port4">USB4Port4Status</label>
+                    <select id="port4" name="port4">
+                        <option value="connected">connected</option>
+                        <option value="disconnected">disconnected</option>
+                    </select>
+                </div>
+                 </td>
+                    </tr></table>
+                
+            </fieldset>
+        </form>
+    </div>
+</body>
+
+</html>
